@@ -4,8 +4,9 @@ import math
 import os
 import re
 import sys
-import cProfile
+import random
 
+from collections import Counter
 from PorterStemmer import PorterStemmer
 
 
@@ -143,24 +144,12 @@ class IRSystem:
         map(list.reverse, self.reverse_sorted_docs)
 
     def compute_idf(self, word):
+        """
+        Computes the idf of the given word. Needs the inv_index set up - do this by calling self.index
+        """
         N = len(self.docs)
         df = len(self.inv_index[word])
         return math.log(N*1.0/df,10)
-
-    def compute_tf(self, word, doc_id):
-        """
-        Computes tf of a given word-document pair.
-        """
-        # tf_td = doc.count(word)
-        try:
-            tf_td = len(self.docs[doc_id]) - self.sorted_docs[doc_id].index(word) - self.sorted_docs[doc_id].index(word)
-        except ValueError:
-            return 0
-        
-        if tf_td > 0:
-            return 1 + math.log(tf_td,10)
-
-        return 0
 
     def compute_tfidf(self):
         # -------------------------------------------------------------------
@@ -175,23 +164,21 @@ class IRSystem:
         print "Calculating tf-idf..."
         self.tfidf = {}
 
-        i = 0
-        for word in self.vocab:
-            i += 1
-            if (i > 100):
-                break
+        for numbered_doc in enumerate(self.docs):
 
-            idf = self.compute_idf(word)
-
-            for d in range(len(self.docs)):
+            doc_id = numbered_doc[0]
+            word_counter = Counter(self.docs[doc_id])
+            for word in word_counter.keys():
                 if word not in self.tfidf:
                     self.tfidf[word] = {}
-                
-                tf = self.compute_tf(word, d)
-                tf_idf = tf * idf
 
-                if tf_idf != 0:
-                    self.tfidf[word][d] = tf * idf
+                self.tfidf[word][doc_id] = 1 + math.log(word_counter[word], 10)
+
+        for word in self.tfidf:
+            idf = self.compute_idf(word)
+
+            for doc_id in self.tfidf[word]:
+                self.tfidf[word][doc_id] *= idf
 
 
     def get_tfidf(self, word, document):
@@ -227,9 +214,10 @@ class IRSystem:
 
         for numbered_doc in enumerate(self.docs):
             docID = numbered_doc[0]
-            for word in numbered_doc[1]:
+            for word in sorted(list(set(numbered_doc[1]))):
                 inv_index[word].append(docID)
 
+        
         self.inv_index = inv_index
 
         # ------------------------------------------------------------------
@@ -413,7 +401,6 @@ def main(args):
     irsys.index()
     irsys.compute_tfidf()
     
-    """
     if len(args) == 0:
         run_tests(irsys)
     else:
@@ -422,10 +409,8 @@ def main(args):
         results = irsys.query_rank(query)
         for docId, score in results:
             print "%s: %e" % (irsys.titles[docId], score)
-    """
 
 
 if __name__ == '__main__':
     args = sys.argv[1:]
-    #main(args)
-    cProfile.run("main(args)")
+    main(args)
