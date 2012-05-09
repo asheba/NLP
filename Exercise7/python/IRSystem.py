@@ -4,6 +4,7 @@ import math
 import os
 import re
 import sys
+import cProfile
 
 from PorterStemmer import PorterStemmer
 
@@ -68,6 +69,7 @@ class IRSystem:
             f.close()
             of.close()
             docs.append(contents)
+
         return titles, docs
 
 
@@ -135,6 +137,30 @@ class IRSystem:
         # Get the vocabulary.
         self.vocab = [xx for xx in self.get_uniq_words()]
 
+        # My additions - sorted documents
+        self.sorted_docs = [sorted(doc) for doc in self.docs]
+        self.reverse_sorted_docs = [doc[:] for doc in self.sorted_docs]
+        map(list.reverse, self.reverse_sorted_docs)
+
+    def compute_idf(self, word):
+        N = len(self.docs)
+        df = len(self.inv_index[word])
+        return math.log(N*1.0/df,10)
+
+    def compute_tf(self, word, doc_id):
+        """
+        Computes tf of a given word-document pair.
+        """
+        # tf_td = doc.count(word)
+        try:
+            tf_td = len(self.docs[doc_id]) - self.sorted_docs[doc_id].index(word) - self.sorted_docs[doc_id].index(word)
+        except ValueError:
+            return 0
+        
+        if tf_td > 0:
+            return 1 + math.log(tf_td,10)
+
+        return 0
 
     def compute_tfidf(self):
         # -------------------------------------------------------------------
@@ -148,22 +174,28 @@ class IRSystem:
         #       word actually occurs in the document.
         print "Calculating tf-idf..."
         self.tfidf = {}
+
+        i = 0
         for word in self.vocab:
+            i += 1
+            if (i > 100):
+                break
+
+            idf = self.compute_idf(word)
+
             for d in range(len(self.docs)):
                 if word not in self.tfidf:
                     self.tfidf[word] = {}
-                self.tfidf[word][d] = 0.0
+                
+                tf = self.compute_tf(word, d)
+                tf_idf = tf * idf
 
-        # ------------------------------------------------------------------
+                if tf_idf != 0:
+                    self.tfidf[word][d] = tf * idf
 
 
     def get_tfidf(self, word, document):
-        # ------------------------------------------------------------------
-        # TODO: Return the tf-idf weigthing for the given word (string) and
-        #       document index.
-        tfidf = 0.0
-        # ------------------------------------------------------------------
-        return tfidf
+        return self.tfidf[word][document]
 
 
     def get_tfidf_unstemmed(self, word, document):
@@ -193,6 +225,11 @@ class IRSystem:
         for word in self.vocab:
             inv_index[word] = []
 
+        for numbered_doc in enumerate(self.docs):
+            docID = numbered_doc[0]
+            for word in numbered_doc[1]:
+                inv_index[word].append(docID)
+
         self.inv_index = inv_index
 
         # ------------------------------------------------------------------
@@ -203,12 +240,7 @@ class IRSystem:
         Given a word, this returns the list of document indices (sorted) in
         which the word occurs.
         """
-        # ------------------------------------------------------------------
-        # TODO: return the list of postings for a word.
-        posting = []
-
-        return posting
-        # ------------------------------------------------------------------
+        return self.inv_index[word]
 
 
     def get_posting_unstemmed(self, word):
@@ -228,17 +260,11 @@ class IRSystem:
         query).
         Return an empty list if the query does not return any documents.
         """
-        # ------------------------------------------------------------------
-        # TODO: Implement Boolean retrieval. You will want to use your
-        #       inverted index that you created in index().
-        # Right now this just returns all the possible documents!
-        docs = []
-        for d in range(len(self.docs)):
-            docs.append(d)
 
-        # ------------------------------------------------------------------
+        postings = map(set,map(self.get_posting, query))
+        matching_doc_ids = set(range(len(self.docs))).intersection(*postings)
 
-        return sorted(docs)   # sorted doesn't actually matter
+        return sorted(matching_doc_ids)
 
 
     def rank_retrieve(self, query):
@@ -386,7 +412,8 @@ def main(args):
     irsys.read_data('../data/RiderHaggard')
     irsys.index()
     irsys.compute_tfidf()
-
+    
+    """
     if len(args) == 0:
         run_tests(irsys)
     else:
@@ -395,8 +422,10 @@ def main(args):
         results = irsys.query_rank(query)
         for docId, score in results:
             print "%s: %e" % (irsys.titles[docId], score)
+    """
 
 
 if __name__ == '__main__':
     args = sys.argv[1:]
-    main(args)
+    #main(args)
+    cProfile.run("main(args)")
