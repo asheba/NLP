@@ -8,6 +8,7 @@ import random
 
 from collections import Counter
 from PorterStemmer import PorterStemmer
+from copy import deepcopy
 
 
 class IRSystem:
@@ -263,12 +264,34 @@ class IRSystem:
 
         return scores
 
+    def normalized_length(self, doc_id):
+        """
+        Normalizes length of the given document: sums the squared TFIDF score of the 
+        SET (meaning unique) of all words in the document and returns the square root of the sum.
+        """
+        word_wtf_in_doc = [self.tfidf[word][doc_id] for word in set(self.docs[doc_id])]
+        return sum(map(lambda x: x**2, word_wtf_in_doc)) ** 0.5
+
+    def calculate_cosine_scores(self, query):
+        scores = [0.0 for xx in range(len(self.docs))]
+        lengths = [self.normalized_length(doc_id) for doc_id in range(len(self.docs))]
+
+        for term in set(query):
+            query_weighted_term_frequency = 1 + math.log(query.count(term), 10)
+            for doc_id in self.get_posting(term):
+                scores[doc_id] += self.tfidf[term][doc_id] * query_weighted_term_frequency
+
+        scores = [score/length for score,length in zip(scores,lengths)]
+        return scores
+
+
     def rank_retrieve(self, query):
         """
         Given a query (a list of words), return a rank-ordered list of
         documents (by ID) and score for the query.
         """
-        scores = self.calculate_score_by_jaccard(query)
+        #scores = self.calculate_score_by_jaccard(query)
+        scores = self.calculate_cosine_scores(query)
 
         ranking = [idx for idx, sim in sorted(enumerate(scores),
             key = lambda xx : xx[1], reverse = True)]
