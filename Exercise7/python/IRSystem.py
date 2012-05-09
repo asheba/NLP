@@ -164,9 +164,8 @@ class IRSystem:
         print "Calculating tf-idf..."
         self.tfidf = {}
 
-        for numbered_doc in enumerate(self.docs):
+        for doc_id, doc in enumerate(self.docs):
 
-            doc_id = numbered_doc[0]
             word_counter = Counter(self.docs[doc_id])
             for word in word_counter.keys():
                 if word not in self.tfidf:
@@ -212,10 +211,9 @@ class IRSystem:
         for word in self.vocab:
             inv_index[word] = []
 
-        for numbered_doc in enumerate(self.docs):
-            docID = numbered_doc[0]
-            for word in sorted(list(set(numbered_doc[1]))):
-                inv_index[word].append(docID)
+        for doc_id, doc in enumerate(self.docs):
+            for word in sorted(list(set(doc))):
+                inv_index[word].append(doc_id)
 
         
         self.inv_index = inv_index
@@ -254,29 +252,23 @@ class IRSystem:
 
         return sorted(matching_doc_ids)
 
+    def calculate_score_by_jaccard(self, query):
+        scores = [0.0 for xx in range(len(self.docs))]
+        
+        words_in_query = set(query)
+
+        for d, doc in enumerate(self.docs):
+            words_in_doc = set(doc)
+            scores[d] = len(words_in_query.intersection(words_in_doc)) / float(len(words_in_query.union(words_in_doc)))
+
+        return scores
 
     def rank_retrieve(self, query):
         """
         Given a query (a list of words), return a rank-ordered list of
         documents (by ID) and score for the query.
         """
-        scores = [0.0 for xx in range(len(self.docs))]
-        # ------------------------------------------------------------------
-        # TODO: Implement cosine similarity between a document and a list of
-        #       query words.
-
-        # Right now, this code simply gets the score by taking the Jaccard
-        # similarity between the query and every document.
-        words_in_query = set()
-        for word in query:
-            words_in_query.add(word)
-
-        for d, doc in enumerate(self.docs):
-            words_in_doc = set(doc)
-            scores[d] = len(words_in_query.intersection(words_in_doc)) \
-                    / float(len(words_in_query.union(words_in_doc)))
-
-        # ------------------------------------------------------------------
+        scores = self.calculate_score_by_jaccard(query)
 
         ranking = [idx for idx, sim in sorted(enumerate(scores),
             key = lambda xx : xx[1], reverse = True)]
