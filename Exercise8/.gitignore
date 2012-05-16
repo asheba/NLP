@@ -1,2 +1,5 @@
 java/
 java/**/*
+._data
+._python
+._java
