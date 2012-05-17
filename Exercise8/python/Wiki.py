@@ -1,4 +1,5 @@
 import sys, traceback
+import re
 
 class Wiki:
     
@@ -18,17 +19,107 @@ class Wiki:
     # two different implementations based upon the useInfoBox flag. 
     def processFile(self, f, wives, useInfoBox):
         
-        husbands = [] 
+        husbands = []
+
+        if useInfoBox:
+            wives_to_husbands = self.parseWivesFromInfoBox(f)
+        else:
+            wives_to_husbands = self.parseWivesFromRawText(f)
         
-        # TODO:
-        # Process the wiki file and fill the husbands Array
-        # +1 for correct Answer, 0 for no answer, -1 for wrong answers
-        # add 'No Answer' string as the answer when you dont want to answer
-        
+        # print wives_to_husbands
+        # print wives
+
         for wife in wives:
-            husbands.append('No Answer')
+            if wife.strip() in wives_to_husbands:
+                husbands.append("Who is " + wives_to_husbands[wife.strip()] + "?")
+            else:
+                husbands.append('No Answer')
         f.close()
         return husbands
+
+    def parseWivesFromInfoBox(self, f):
+        infoboxes = self.parseInfoBoxes(f)
+        wives_to_husbands = {}
+        for infobox in infoboxes:
+            spouse = self.parseFromInfoBox("spouse", infobox)
+            if not spouse:
+                spouse = self.parseSpouseFromInfoBox(infobox)
+            name = self.parseFromInfoBox("name", infobox)
+            if spouse and name:
+                wives_to_husbands[spouse] = name
+
+        return self.addTruncatedSurnames(wives_to_husbands)
+
+    def addTruncatedSurnames(self, wives_to_husbands):
+        extras = {}
+
+        for wife in wives_to_husbands:
+            shusband = wives_to_husbands[wife].split(" ")
+            swife = wife.split(" ")
+            no_surname_wife = []
+            for term in swife:
+                if term not in shusband and "&quot" not in term:
+                    no_surname_wife.append(term)
+
+            extras[" ".join(no_surname_wife)] = wives_to_husbands[wife]
+
+        wives_to_husbands.update(extras)
+        return wives_to_husbands
+
+    def parseWivesFromRawText(self, f):
+        # parse page from file
+        # search terms like [married, who married]
+        # search [[Phrases]] within 3 word difference
+        # compare **
+        # search Capitalized Names within 5 word difference
+        # compare **
+
+        # compare = search on the other side (on the left prepositions - on the right prep's)
+        return {}
+
+    def parseSpouseFromInfoBox(self, infobox):
+        pattern = re.compile("\[\[((?:\w+\.?\s)*\w+)\]\]")
+        for line in infobox:
+            if "spouse" in line.lower():
+                res = pattern.search(line)
+                if res:
+                    return res.group(1)
+
+        return None
+
+    def parseInfoBoxes(self, f):
+        infoboxes = []
+
+        lines = f.readlines()
+        read_to_buffer = False
+        infobox = []
+
+        for line in lines:
+            if "{{Infobox" in line:
+                read_to_buffer = True
+            elif line.startswith("}}"):
+                read_to_buffer = False
+                infoboxes.append(infobox)
+                infobox = []
+            
+            if read_to_buffer:
+                infobox.append(line)
+
+        return infoboxes
+
+    def parseFromInfoBox(self, term, infobox):
+        search_pattern = "\|\s*" + self.enhanceTerm(term) + "\s*=\s?\[?\[?((?:(?:&quot;)?\w+\.?(?:&quot;)?\s)*\w+)"
+        pattern = re.compile(search_pattern)
+        for line in infobox:
+            res = pattern.match(line)
+            if res:
+                return res.group(1)
+
+        return None
+
+    def enhanceTerm(self, term):
+        return "(?:{0}|{1}|{2})".format(term.lower(), term.upper(), term[0].upper() + term[1:].lower())
+
     
     # scores the results based upon the aforementioned criteria
     def evaluateAnswers(self, useInfoBox, husbandsLines, goldFile):
@@ -48,6 +139,7 @@ class Wiki:
                 print('Number of lines in husbands file should be same as number of wives!')
                 sys.exit(1)
             for i in range(goldLength):
+                # print husbandsLines[i], " ----- ", goldLines[i]
                 if husbandsLines[i].strip() in set(goldLines[i].strip().split('|')):
                     correct += 1
                     score += 1
